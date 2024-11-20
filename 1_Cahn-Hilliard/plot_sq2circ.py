@@ -32,8 +32,8 @@ for frame in range(nframe):
     
     grad_x = grad(arr)
     grad_y = grad(arr.T).T
-    grad_mag = np.sqrt(grad_x**2 + grad_y**2)
-    free_energy.append(np.sum( arr**2 * (1-arr)**2 + 0.5/2 * grad_mag**2))
+    grad_mag_sq = grad_x**2 + grad_y**2
+    free_energy.append(np.sum( arr**2 * (1-arr)**2 + 0.5/2 * grad_mag_sq))
     conc.append(np.sum(arr)/(mul(grid.dimensions)))
 
     p.add_mesh(pvd.read()[0], show_scalar_bar=True, **mesh_kwargs)
