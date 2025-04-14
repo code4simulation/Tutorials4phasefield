@@ -1,3 +1,4 @@
+// Build with -std=c++17
 #include <iostream>
 #include <fstream>
 #include <sstream>
