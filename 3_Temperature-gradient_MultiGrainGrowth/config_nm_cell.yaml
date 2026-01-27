@@ -1,0 +1,96 @@
+# ==========================================
+# Phase Field Simulation Configuration
+# ==========================================
+# This file controls all parameters for the Multi-Grain Phase Field Simulation.
+# You can modify these values to change the experiment setup without editing Python code.
+
+metadata:
+  experiment_name: "Phase Field Simulation"
+  description: "Testing Phase Field Simulation."
+
+# -------------------------------------------------------------------------
+# 1. Domain Settings
+# -------------------------------------------------------------------------
+domain:
+  nx: 200             # Grid points in X (Temperature Gradient Direction)
+  ny: 1000            # Grid points in Y
+  dx_real_m: 1.0e-10   # Physical spacing between grid points (meters)
+  max_grains: 50     # Maximum number of grains allowed in memory
+
+# -------------------------------------------------------------------------
+# 2. Time Integration
+# -------------------------------------------------------------------------
+time_integration:
+  dt_sim: 0.001                 # Dimensionless time step (Typical: 0.01)
+  physical_duration_sec: 100.0e-9 # Total physical time to simulate (seconds)
+  output_interval_steps: 2000   # Save simulation state every N steps (Increased for fine grid)
+
+# -------------------------------------------------------------------------
+# 3. Material Properties (Silicon)
+# -------------------------------------------------------------------------
+material:
+  name: "Silicon"
+  Tm_K: 1687.0        # Melting Temperature (Kelvin)
+  Vm_m3_mol: 12.0e-6  # Molar Volume (m^3/mol)
+  sigma_J_m2: 0.32    # Solid-Liquid Interfacial Energy (J/m^2)
+  Hf_J_mol: 50.21e3   # Enthalpy of Fusion (J/mol) -- Note: Converted to J/m3 in loader
+  
+  # Kinetic Parameters
+  kinetics:
+    V0_m_s: 3000.0    # Growth pre-factor (m/s)
+    Q_eV: 0.5         # Activation Energy (eV)
+    I0: 1.0e39        # Nucleation prefactor (events/m^3/s)
+
+# -------------------------------------------------------------------------
+# 4. Phase Field Model Parameters
+# -------------------------------------------------------------------------
+phase_field:
+  xi_sim: 5.0         # Diffuse interface width in grid points (Recommended: 3.0 ~ 6.0)
+  
+  # Penalty Coefficient for multi-grain exclusion.
+  # Options:
+  #   - "auto": Automatically calculate minimum safe value based on driving force.
+  #   - <float>: Manually set the value (e.g., 5.0).
+  epsilon_penalty: "auto" 
+  
+  # Safety factor for auto-epsilon. High = More stable, Slower.
+  safety_factor: 1.5  
+
+# -------------------------------------------------------------------------
+# 5. Temperature Profile
+# -------------------------------------------------------------------------
+temperature:
+  # Method to determine temperature profile.
+  # Options: 
+  #   - "dynamic": Load time-dependent profile from CSV file.
+  #   - "static": Linear gradient fixed in time (T_left -> T_right).
+  method: "static"
+  
+  # Configuration for "dynamic" method
+  #dynamic:
+  #  csv_path: "data/temperature_profile.csv" # CSV Columns: [Time, T_left, T_right]
+  
+  # Configuration for "static" method (Used if method is "static")
+  static:
+    T_left_K: 900.0
+    T_right_K: 1100.0
+
+# -------------------------------------------------------------------------
+# 6. Nucleation Settings
+# -------------------------------------------------------------------------
+nucleation:
+  enabled: true
+  
+  # Method of nucleation.
+  # Options:
+  #   - "stochastic": (Recommended) Probabilistic method running inside C++ kernel.
+  #   - "kmc": (Legacy) Kinetic Monte Carlo pre-calculation.
+  method: "stochastic"
+  
+  seed: 260127
+
+# -------------------------------------------------------------------------
+# 7. Output Paths
+# -------------------------------------------------------------------------
+paths:
+  output_root: "data/experiments"
