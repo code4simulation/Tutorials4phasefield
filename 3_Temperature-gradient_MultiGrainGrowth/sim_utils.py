@@ -212,7 +212,7 @@ def resume_from_vtk(vtk_path, config):
         if match:
              start_step = int(match.group(1))
         else:
-             print("[WARN] Could not parse step number from filename. Assuming step 0.")
+             print("[WARN] Could not parse step number from filename. Assumiang step 0.")
              start_step = 0
              
         # 2. Load VTK Data
