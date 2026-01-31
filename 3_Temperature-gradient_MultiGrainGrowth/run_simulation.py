@@ -700,35 +700,45 @@ def create_animation(dump_dir, frames_dir, output_file, nx_arg, ny_arg, max_grai
         return
         
     print(f"[*] Found {len(vtk_files)} VTK files.")
+    
+    try:
+        if vtk_files:
+            last_file = vtk_files[-1]
+            last_data = load_packed_vtk(last_file)
+            max_id_found = 0
+            found_phi = False
+            for k in last_data['arrays'].keys():
+                if k.startswith("Phi_"):
+                    found_phi = True
+                    try:
+                        gid = int(k.split('_')[1])
+                        max_id_found = max(max_id_found, gid)
+                    except ValueError: pass
+            
+            if found_phi and max_id_found >= max_grains:
+                print(f"[INFO] Auto-adjusting max_grains: {max_grains} -> {max_id_found + 1} (based on data detection)")
+                max_grains = max_id_found + 1
+    except Exception as e:
+        print(f"[WARN] Failed to auto-detect max_grains: {e}")
+
     ensure_dir(frames_dir)
     
     for i, file_path in enumerate(vtk_files):
         try:
             step_num = int(os.path.basename(file_path).split('_')[-1].split('.')[0])
             
-            # Use updated loader
             data = load_packed_vtk(file_path)
             arrays = data['arrays']
             nx = data['nx']
             ny = data['ny']
             
-            # --- Reconstruct Grain ID Map with Threshold 0.75 ---
-            # Default to -1 or 0 for "Liquid/None"
             grain_map = np.full((nx, ny), -1, dtype=int)
-            max_phi_map = np.zeros((nx, ny))
             
-            # Iterate over all "Phi_*" arrays
             for name, arr in arrays.items():
                 if name.startswith("Phi_"):
                     gid = int(name.split('_')[1])
-                    # Mask where this grain's phi > 0.75
                     mask = arr > 0.75
-                    # Update grain map
-                    # If overlapping, last one wins (or could do argmax logic if we tracked max)
                     grain_map[mask] = gid
-                    
-                    # Track max phi for visualization (optional)
-                    max_phi_map = np.maximum(max_phi_map, arr)
 
             # Get Other Scalar Fields
             sigma_sq = arrays.get("SigmaPhiSq", np.zeros((nx, ny)))
@@ -750,10 +760,9 @@ def create_animation(dump_dir, frames_dir, output_file, nx_arg, ny_arg, max_grai
                 # Using 100 unit steps for visibility
                 ax.set_xticks(np.arange(0, nx + 1, 100))
                 ax.set_yticks(np.arange(0, ny + 1, 100))
-                ax.grid(color='white', linestyle='--', linewidth=0.5, alpha=0.3)
 
             # Ax1: Grain ID
-            cmap_grains = plt.cm.get_cmap('nipy_spectral', max_grains + 1)
+            cmap_grains = plt.cm.get_cmap('gist_rainbow', max_grains + 1)
             masked_grains = np.ma.masked_where(grain_map < 0, grain_map)
             
             ax1.set_facecolor('black')
@@ -785,13 +794,31 @@ def create_animation(dump_dir, frames_dir, output_file, nx_arg, ny_arg, max_grai
             set_ticks(ax3, nx, ny)
             plt.colorbar(im3, ax=ax3, orientation='vertical', label='Temperature (K)')
             
+            # [Fix] Adaptive Time Display (ns vs us) and Dimensions Check
+            # Check for potential config mismatch on first frame
+            if i == 0:
+                if nx != nx_arg or ny != ny_arg:
+                    print(f"\n[WARNING] Config dimensions ({nx_arg}x{ny_arg}) do not match data dimensions ({nx}x{ny})!")
+                    print(f"         Time/Scale info might be incorrect. Did you use the correct --config?")
+            
             # Time Annotation
             if scale_obj and dt_sim:
                 try: 
-                    real_time = scale_obj.to_real_time(step_num * dt_sim)
-                except: 
-                    real_time = 0.0
-                fig.suptitle(f"Time: {real_time*1e6:.2f} us", fontsize=16)
+                    real_time_sec = scale_obj.to_real_time(step_num * dt_sim)
+                    
+                    if real_time_sec < 1.0e-6:
+                        # Nanoseconds
+                        val = real_time_sec * 1.0e9
+                        unit = "ns"
+                    else:
+                        # Microseconds
+                        val = real_time_sec * 1.0e6
+                        unit = "us"
+                        
+                    fig.suptitle(f"Time: {val:.3f} {unit}", fontsize=16)
+                except Exception as e: 
+                    print(f"[WARN] Time recalc failed: {e}")
+                    fig.suptitle(f"Step: {step_num}", fontsize=16)
             else:
                 fig.suptitle(f"Step: {step_num}", fontsize=16)
 
@@ -800,13 +827,14 @@ def create_animation(dump_dir, frames_dir, output_file, nx_arg, ny_arg, max_grai
             plt.close(fig)
             
             if i % 10 == 0:
-                print(f"  -> Generated frame {i+1}/{len(vtk_files)}")
+                print(f"  -> Generated frame {i+1}/{len(vtk_files)}", end='\r')
 
         except Exception as e:
             print(f"[ERR] Failed {file_path}: {e}")
             import traceback
             traceback.print_exc()
 
+    print(f"\n[+] Frame generation complete. Total frames: {len(vtk_files)}")
     print("[+] Frame generation complete.")
     
     # FFmpeg (Optional check)
@@ -936,6 +964,8 @@ def run_phase3_simulation(sim_params: dict, resume_file: str = None, animate_onl
     
     start_step = 0
     
+    print(f"[DEBUG] run_phase3_simulation: animate_only={animate_only}, resume_file={resume_file}")
+    
     if not animate_only:
         if resume_file:
             # Resume Mode: Don't clean old files if they are BEFORE the resume point?
@@ -996,7 +1026,25 @@ def run_phase3_simulation(sim_params: dict, resume_file: str = None, animate_onl
     
     # Schedule setup... (Same as before)
     nucleation_enabled = sim_params.get('z_nucleation', 0)
-    nucl_params = sim_params.get('nucl_params', [0.0, 0.0, 0.0, 0.0]) # I0, Q, Tm, Vm
+    nucl_params = sim_params.get('nucl_params', [0.0, 0.0, 0.0, 1.0e-27]) # I0, Q, Tm, Vm (Default 1e-27 is placeholder)
+    
+    # Prepare Nucleation Parameters (Dict for C++ Wrapper)
+    # Automatically calculate cell volume based on resolution (assuming cubic voxel)
+    cell_vol_auto = dx_real**3 
+    
+    nucl_dict = {
+        'I0': mat.I0,
+        'Qdiff_J': mat.Qdiff_eV * 1.60218e-19,
+        'sigma': mat.sigma,
+        'Tm': mat.Tm,
+        'Vm': mat.Vm,
+        'Hf': mat.Hf, # J/mol
+        'cell_vol': cell_vol_auto
+    }
+    
+    # Overwrite with any manual overrides from config if present
+    if 'nucl_params' in sim_params and isinstance(sim_params['nucl_params'], dict):
+        nucl_dict.update(sim_params['nucl_params'])
     
     sched_times = sim_params.get('sched_time', [])
     sched_TL = sim_params.get('sched_TL', [])
@@ -1035,7 +1083,7 @@ def run_phase3_simulation(sim_params: dict, resume_file: str = None, animate_onl
         'use_active_list': use_optimization,
         # New
         'z_nucleation': nucleation_enabled,
-        'nucl_params': nucl_params,
+        'nucl_params': nucl_dict,
         't_scale': scale.t0,
         'sched_time': sched_times,
         'sched_TL': sched_TL,
@@ -1523,9 +1571,13 @@ def main(animate_only=False):
 def main_configured():
     parser = argparse.ArgumentParser(description="Multi-Grain Phase Field Simulation")
     parser.add_argument('--config', type=str, help='Path to config.yaml', default='config.yaml')
-    parser.add_argument('--animate-only', action='store_true', help='Skip simulation and only run animation/visualization on existing dump files.')
+    parser.add_argument('--animate-only', '--animation-only', dest='animate_only', action='store_true', help='Skip simulation and only run animation/visualization on existing dump files.')
     parser.add_argument('--benchmark', action='store_true', help='Run AVX-512 Performance Benchmark and exit.')
     args, unknown = parser.parse_known_args()
+    
+    print(f"[DEBUG] CLI Args: animate_only={args.animate_only}, benchmark={args.benchmark}")
+    if unknown:
+        print(f"[DEBUG] Unknown Args: {unknown}")
 
     if args.benchmark:
         ensure_dir(CPP_DIR)
