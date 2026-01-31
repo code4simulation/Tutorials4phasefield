@@ -5,8 +5,8 @@
 # You can modify these values to change the experiment setup without editing Python code.
 
 metadata:
-  experiment_name: "Rapid_Heating_01"
-  description: "Testing nucleation under dynamic heating profile."
+  experiment_name: "Micrometer scale simulation"
+  description: "Micrometer scale simulation."
 
 # -------------------------------------------------------------------------
 # 1. Domain Settings
@@ -23,6 +23,7 @@ domain:
 time_integration:
   dt_sim: 0.001                 # Dimensionless time step (Typical: 0.01)
   #physical_duration_sec: 2.5e-6 # Total physical time to simulate (seconds)
+  #output_interval_steps: 100   # Save simulation state every N steps
   physical_duration_sec: 0.1e-6 # Total physical time to simulate (seconds)
   output_interval_steps: 10   # Save simulation state every N steps
 
@@ -88,11 +89,10 @@ nucleation:
   #   - "kmc": (Legacy) Kinetic Monte Carlo pre-calculation.
   method: "stochastic"
   
-  seed: 260127
+  seed: 260131
 
 # -------------------------------------------------------------------------
 # 7. Output Paths
 # -------------------------------------------------------------------------
 paths:
   output_root: "data/experiments"
-
