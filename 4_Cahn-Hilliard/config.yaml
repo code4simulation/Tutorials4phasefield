@@ -1,0 +1,46 @@
+# Cahn-Hilliard Simulation Configuration
+
+simulation:
+  Nx: 144
+  Ny: 144
+  Nz: 144             # Added: Z-axis depth for 3D simulation
+  dx_m: 1.0e-9       # 1 nm
+  dt_s: 1.0e-7       # 100 ns
+  
+  # --- Geometry ---
+  geometry:
+    # Supported types: 'cube', 'solid_cylinder', 'hollow_cylinder'
+    type: "hollow_cylinder"
+    R_inner_m: 50.0e-9    # 50 nm (Air border)
+    R_outer_m: 60.0e-9    # 60 nm (Spacer border)
+    gamma_in_J_m2:  0.05  # ∆gamma at inner boundary (Air-favoring)
+    gamma_out_J_m2: 0.05  # ∆gamma at outer boundary (Spacer-favoring)
+
+  # --- Material Parameters ---
+  # parameter_mode can be "physical" or "direct"
+  parameter_mode: "physical"
+  
+  physical_params:
+    interfacial_energy_J_m2: 0.2       # gamma_int
+    interfacial_thickness_m: 3.0e-9    # Lc (~3*dx)
+    diffusivity_m2_s: 1.0e-7           # D
+    
+  #direct_params:
+  #  M: 1.0e-21         # Mobility [m^2 / (J s)]
+  #  kappa: 1.0e-10     # Gradient Energy Coefficient [J / m]
+  #  W: 1.0e8           # Double-Well Potential Height [J / m^3]
+  
+  # --- Runtime ---
+  # [Guideline 2: Numerical Stability (Explicit Euler)]
+  # dt_s MUST be small enough to avoid numerical explosion due to the 4th-order derivative.
+  # Constraint: dt_s <= (dx_m)^4 / (8 * M * kappa)
+  # Example: (1e-9)^4 / (8 * 1e-21 * 1e-10) = 1.25e-6 seconds. So dt_s = 1e-7 is safe.
+  dt_s: 1.0e-7       # 100 ns
+  total_time_s: 5.0e-3 # 5 ms 
+  output_interval_steps: 1000
+  dump_dir: "data/ch_output"
+
+initialization:
+  c_ref_atoms_cm3: 5.0e22      # Reference atomic density (e.g. solid density) for normalization to [0, 1]
+  c0_atoms_cm3: 1.0e19         # Average physical concentration
+  noise_amplitude_atoms_cm3: 1.0e17  # Random normal noise amplitude
